@@ -332,25 +332,47 @@ def _compare_indexes_and_constraints(schema, tname, object_filters,
         conn_table, metadata_table, diffs, autogen_context, inspector):
     m_indexes = dict(
         {i.name: i for i in metadata_table.indexes}.items() + 
-        {i.name: i for i in metadata_table.constraints if isinstance(i, sa_schema.UniqueConstraint)}.items()
+        {i.name or _autogenerate_unique_constraint_name({
+                        'table': conn_table, 
+                        'columns': i.columns
+            }): i \
+        for i in metadata_table.constraints \
+        if isinstance(i, sa_schema.UniqueConstraint)}.items()
     )
     m_keys = set(m_indexes.keys())
 
     # standardized form of indexes and unique constraints
     try:
-        conn_idx_unq = {i['name']: i for i in inspector.get_indexes(tname)}
+        conn_idx_unq = {(i['name'] or _autogenerate_unique_constraint_name({
+                        'table': conn_table, 
+                        'columns': i['columns']
+            })): i for i in inspector.get_indexes(tname)}
     except NoSuchTableError:
         conn_idx_unq = {}
+    c_keys = set(conn_idx_unq.keys())
+
     meta_idx_unq = dict(
-        {i.name: {'name': i.name, 'unique': i.unique, 'column_names': [e.name for e in i.expressions]} \
+        {i.name: {
+            'name': i.name, 
+            'unique': i.unique, 
+            'column_names': [e.name for e in i.expressions]
+        } \
         for i in metadata_table.indexes}.items()\
         +\
-        {i.name: {'name': i.name, 'unique': True, 'column_names': [c.name for c in i.columns]} \
+        {i.name or _autogenerate_unique_constraint_name({
+                        'table': conn_table, 
+                        'columns': i.columns
+            }): {
+            'name': i.name or _autogenerate_unique_constraint_name({
+                            'table': conn_table, 
+                            'columns': i.columns
+            }), 
+            'unique': True, 
+            'column_names': [c.name for c in i.columns]
+        } \
         for i in metadata_table.constraints \
         if isinstance(i, sa_schema.UniqueConstraint)}.items()
     )
-
-    c_keys = set(conn_idx_unq.keys())
 
     diff_add = m_keys - c_keys
     if diff_add:
@@ -358,17 +380,17 @@ def _compare_indexes_and_constraints(schema, tname, object_filters,
             meta_idx = m_indexes[x]
             if isinstance(m_indexes[x], sa_schema.Index):
                 diffs.append(("add_index", meta_idx))
-                log.info("Detected added index '%s' on %s" % \
-                    (x, ', '.join([
+                log.info("Detected added index '%s' on %s",
+                    x, ', '.join([
                         "'%s'" % y.name for y in meta_idx.expressions
-                        ]))
+                        ])
                 )
             else:
                 diffs.append(("add_constraint", meta_idx))
-                log.info("Detected added unique constraint '%s' on %s" % \
-                    (x, ', '.join([
+                log.info("Detected added unique constraint '%s' on %s",
+                    x, ', '.join([
                         "'%s'" % y.name for y in meta_idx.columns
-                        ]))
+                        ])
                 )
 
     diff_del = c_keys - m_keys
@@ -377,10 +399,10 @@ def _compare_indexes_and_constraints(schema, tname, object_filters,
             idx = _make_index_or_unique(conn_idx_unq[x], conn_table)
             if isinstance(idx, sa_schema.Index):
                 diffs.append(("remove_index", idx))
-                log.info("Detected removed index '%s' on '%s'" % (x, tname))
+                log.info("Detected removed index '%s' on '%s'", x, tname)
             elif isinstance(idx, sa_schema.UniqueConstraint):
                 diffs.append(("remove_constraint", idx))
-                log.info("Detected removed constraint '%s' on '%s'" % (x, tname))
+                log.info("Detected removed constraint '%s' on '%s'", x, tname)
 
     diff_change = m_keys & c_keys
     if diff_change:
@@ -391,15 +413,20 @@ def _compare_indexes_and_constraints(schema, tname, object_filters,
 
             event = None
             if isinstance(imet, sa_schema.Index):
-                if (imet_std['unique'] != icon_std['unique'])\
+                if (imet_std['unique'] or False != icon_std['unique'])\
                     or imet_std['column_names'] != icon_std['column_names']:
-                    diffs.append(("remove_index", _make_index_or_unique(icon_std, conn_table)))
+                    diffs.append(("remove_index", 
+                        _make_index_or_unique(icon_std, conn_table)
+                    ))
                     diffs.append(("add_index", imet))
                     event = 'index'
             elif isinstance(imet, sa_schema.UniqueConstraint):
                 if icon_std['unique'] != True \
                     or imet_std['column_names'] != icon_std['column_names']:
-                    diffs.append(("remove_index", _make_index_or_unique(icon_std, conn_table)))
+                    diffs.append((
+                        "remove_index", 
+                        _make_index_or_unique(icon_std, conn_table)
+                    ))
                     diffs.append(("add_constraint", imet))
                     event = 'unique constraint'
             else: # pragma: no cover
@@ -408,13 +435,14 @@ def _compare_indexes_and_constraints(schema, tname, object_filters,
             if event:
                 d = ''
                 if imet_std['unique'] or False != icon_std['unique'] or False:
-                    d += ' unique=%r to unique=%r' % (imet_std['unique'], icon_std['unique'])
+                    d += ' unique=%r to unique=%r' % \
+                    (imet_std['unique'], icon_std['unique'])
                 if imet_std['column_names'] != icon_std['column_names']: 
                     d += ' columns %r to %r' % (
                         imet_std['column_names'], icon_std['column_names']
                     )
-                log.info("Detected changed %s '%s' on '%s': %s" % \
-                    (event, x, tname, d)
+                log.info("Detected changed %s '%s' on '%s': %s",
+                    event, x, tname, d
                 )
 
 def _compare_nullable(schema, tname, cname, conn_col,
@@ -445,11 +473,11 @@ def _compare_type(schema, tname, cname, conn_col,
     metadata_type = metadata_col.type
     if conn_type._type_affinity is sqltypes.NullType:
         log.info("Couldn't determine database type "
-                    "for column '%s.%s'" % (tname, cname))
+                    "for column '%s.%s'", tname, cname)
         return
     if metadata_type._type_affinity is sqltypes.NullType:
         log.info("Column '%s.%s' has no type within "
-                        "the model; can't compare" % (tname, cname))
+                        "the model; can't compare", tname, cname)
         return
 
     isdiff = autogen_context['context']._compare_type(conn_col, metadata_col)
@@ -643,9 +671,15 @@ def _autogenerate_unique_constraint_name(constraint):
     In order to both create and drop a constraint, we need a name known 
     ahead of time.
     """
+    if isinstance(constraint, sa_schema.UniqueConstraint):
+        table = constraint.table
+        columns = [col.name for col in constraint.columns]
+    elif isinstance(constraint, dict):
+        table = constraint['table']
+        columns = [col.name for col in constraint['columns']]
     return 'uq_%s_%s' % (
-        str(constraint.table).replace('.', '_'), # schema.table -> schema_table
-        '_'.join([col.name for col in constraint.columns])
+        str(table).replace('.', '_'), # schema.table -> schema_table
+        '_'.join(columns)
     )
 
 def _add_unique_constraint(constraint, autogen_context):
