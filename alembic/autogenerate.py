@@ -356,9 +356,12 @@ def _compare_uniques(schema, tname, object_filters, conn_table,
     )
     m_keys = set(m_objs.keys())
 
-    try:
-        conn_uniques = inspector.get_unique_constraints(tname)
-    except (NoSuchTableError, AttributeError):
+    if hasattr(inspector, 'get_unique_constraints'):
+        try:
+            conn_uniques = inspector.get_unique_constraints(tname)
+        except NoSuchTableError:
+            conn_uniques = []
+    else:
         conn_uniques = []
     c_objs = dict(
         (i['name'] or _autogenerate_unique_constraint_name({
@@ -832,7 +835,7 @@ def _sqlalchemy_autogenerate_prefix(autogen_context):
     return autogen_context['opts']['sqlalchemy_module_prefix'] or ''
 
 def _alembic_autogenerate_prefix(autogen_context):
-    return autogen_context['opts'].get('alembic_module_prefix', '')
+    return autogen_context['opts']['alembic_module_prefix'] or ''
 
 def _user_defined_render(type_, object_, autogen_context):
     if 'opts' in autogen_context and \
