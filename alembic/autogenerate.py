@@ -174,7 +174,8 @@ def _run_filters(object_, name, type_, reflected, compare_to, object_filters):
     for fn in object_filters:
         if not fn(object_, name, type_, reflected, compare_to):
             return False
-    return True
+    else:
+        return True
 
 def _produce_net_changes(connection, metadata, diffs, autogen_context,
                             object_filters=(),
@@ -344,6 +345,7 @@ def _compare_columns(schema, tname, object_filters, conn_table, metadata_table,
         if col_diff:
             diffs.append(col_diff)
 
+
 def _compare_uniques(schema, tname, object_filters, conn_table, 
             metadata_table, diffs, autogen_context, inspector):
 
@@ -356,50 +358,43 @@ def _compare_uniques(schema, tname, object_filters, conn_table,
 
     try:
         conn_uniques = inspector.get_unique_constraints(tname)
-        c_objs = dict(
-            (i['name'] or _autogenerate_unique_constraint_name({
-                'table': conn_table, 'columns': i['columns']}),
-             _make_unique_constraint(i, conn_table)) \
-            for i in conn_uniques
-        )
-    except NoSuchTableError:
-        c_objs = {}
+    except (NoSuchTableError, AttributeError):
+        conn_uniques = []
+    c_objs = dict(
+        (i['name'] or _autogenerate_unique_constraint_name({
+            'table': conn_table, 'columns': i['columns']}),
+         _make_unique_constraint(i, conn_table)) \
+        for i in conn_uniques
+    )
     c_keys = set(c_objs.keys())
 
-    diff_add = m_keys - c_keys
-    if diff_add:
-        for key in diff_add:
-            meta = m_objs[key]
+    for key in (m_keys - c_keys):
+        meta = m_objs[key]
+        diffs.append(("add_constraint", meta))
+        log.info("Detected added unique constraint '%s' on %s",
+            key, ', '.join([
+                "'%s'" % y.name for y in meta.columns
+                ])
+        )
+
+    for key in (c_keys - m_keys):
+        diffs.append(("remove_constraint", c_objs[key]))
+        log.info("Detected removed unique constraint '%s' on '%s'",
+            key, tname
+        )
+
+    for key in (m_keys & c_keys):
+        meta = m_objs[key]
+        conn = c_objs[key]
+        conn_cols = [col.name for col in conn.columns]
+        meta_cols = [col.name for col in meta.columns]
+
+        if meta_cols != conn_cols:
+            diffs.append(("remove_constraint", conn))
             diffs.append(("add_constraint", meta))
-            log.info("Detected added unique constraint '%s' on %s",
-                key, ', '.join([
-                    "'%s'" % y.name for y in meta.columns
-                    ])
+            log.info("Detected changed unique constraint '%s' on '%s':%s",
+                key, tname, ' columns %r to %r' % (conn_cols, meta_cols)
             )
-
-    diff_del = c_keys - m_keys
-    if diff_del:
-        for key in diff_del:
-            diffs.append(("remove_constraint", c_objs[key]))
-            log.info("Detected removed unique constraint '%s' on '%s'",
-                key, tname
-            )
-
-    diff_change = m_keys & c_keys
-    if diff_change:
-        for key in diff_change:
-
-            meta = m_objs[key]
-            conn = c_objs[key]
-            conn_cols = [col.name for col in conn.columns]
-            meta_cols = [col.name for col in meta.columns]
-
-            if meta_cols != conn_cols:
-                diffs.append(("remove_constraint", conn))
-                diffs.append(("add_constraint", meta))
-                log.info("Detected changed unique constraint '%s' on '%s':%s",
-                    key, tname, ' columns %r to %r' % (conn_cols, meta_cols)
-                )
 
     # inspector.get_indexes() can conflate indexes and unique 
     # constraints when unique constraints are implemented by the database 
@@ -437,54 +432,51 @@ def _compare_indexes(schema, tname, object_filters, conn_table,
 
     c_keys = set(c_objs.keys())
 
-    m_objs = dict((i.name, i) for i in metadata_table.indexes if i.name not in c_uniques_keys)
+    m_objs = dict(
+        (i.name, i) for i in metadata_table.indexes \
+        if i.name not in c_uniques_keys
+    )
     m_keys = set(m_objs.keys())
 
-    diff_add = m_keys - c_keys
-    if diff_add:
-        for key in diff_add:
-            meta = m_objs[key]
+    for key in (m_keys - c_keys):
+        meta = m_objs[key]
+        diffs.append(("add_index", meta))
+        log.info("Detected added index '%s' on %s",
+            key, ', '.join([
+                "'%s'" % y.name for y in meta.expressions
+                ])
+        )
+
+    for key in (c_keys - m_keys):
+        diffs.append(("remove_index", c_objs[key]))
+        log.info("Detected removed index '%s' on '%s'", key, tname)
+
+    for key in (m_keys & c_keys):
+
+        meta = m_objs[key]
+        conn = c_objs[key]
+        conn_exps = [exp.name for exp in conn.expressions]
+        meta_exps = [exp.name for exp in meta.expressions]
+
+        # todo: kwargs can differ, e.g., changing the type of index
+        #       we can't detect this via the inspection API, though
+        if (meta.unique or False != conn.unique or False)\
+            or meta_exps != conn_exps:
+            diffs.append(("remove_index", conn))
             diffs.append(("add_index", meta))
-            log.info("Detected added index '%s' on %s",
-                key, ', '.join([
-                    "'%s'" % y.name for y in meta.expressions
-                    ])
+
+            msg = []
+            if meta.unique or False != conn.unique or False:
+                msg.append(' unique=%r to unique=%r' % (
+                    conn.unique, meta.unique
+                ))
+            if meta_exps != conn_exps: 
+                msg.append(' columns %r to %r' % (
+                    conn_exps, meta_exps
+                ))
+            log.info("Detected changed index '%s' on '%s':%s",
+                key, tname, ', '.join(msg)
             )
-
-    diff_del = c_keys - m_keys
-    if diff_del:
-        for key in diff_del:
-            diffs.append(("remove_index", c_objs[key]))
-            log.info("Detected removed index '%s' on '%s'", key, tname)
-
-    diff_change = m_keys & c_keys
-    if diff_change:
-        for key in diff_change:
-
-            meta = m_objs[key]
-            conn = c_objs[key]
-            conn_exps = [exp.name for exp in conn.expressions]
-            meta_exps = [exp.name for exp in meta.expressions]
-
-            # todo: kwargs can differ, e.g., changing the type of index
-            #       we can't detect this via the inspection API, though
-            if (meta.unique or False != conn.unique or False)\
-                or meta_exps != conn_exps:
-                diffs.append(("remove_index", conn))
-                diffs.append(("add_index", meta))
-
-                msg = []
-                if meta.unique or False != conn.unique or False:
-                    msg.append(' unique=%r to unique=%r' % (
-                        conn.unique, meta.unique
-                    ))
-                if meta_exps != conn_exps: 
-                    msg.append(' columns %r to %r' % (
-                        conn_exps, meta_exps
-                    ))
-                log.info("Detected changed index '%s' on '%s':%s",
-                    key, tname, ', '.join(msg)
-                )
 
 def _compare_nullable(schema, tname, cname, conn_col,
                             metadata_col_nullable, diffs,
