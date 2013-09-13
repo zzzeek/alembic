@@ -57,6 +57,10 @@ def _compare_tables(conn_table_names, metadata_table_names,
                     conn_table,
                     metadata_table,
                     diffs, autogen_context, inspector)
+            _compare_primary_key(s, tname, object_filters,
+                    conn_table,
+                    metadata_table,
+                    diffs, autogen_context, inspector, existing_metadata)
             c_uniques = _compare_uniques(s, tname,
                     object_filters, conn_table, metadata_table,
                     diffs, autogen_context, inspector)
@@ -69,6 +73,12 @@ def _compare_tables(conn_table_names, metadata_table_names,
     # TODO:
     # table constraints
     # sequences
+
+def _make_pk_constraint(params, conn_table):
+    return sa_schema.PrimaryKeyConstraint(
+        *[conn_table.c[cname] for cname in params['constrained_columns']],
+        name=params['name']
+    )
 
 def _make_index(params, conn_table):
     return sa_schema.Index(
@@ -137,6 +147,51 @@ def _compare_columns(schema, tname, object_filters, conn_table, metadata_table,
         if col_diff:
             diffs.append(col_diff)
 
+def _compare_primary_key(schema, tname, object_filters, conn_table,
+            metadata_table, diffs, autogen_context, inspector, existing_metadata):
+
+    m_pk = metadata_table.primary_key
+    if not len(m_pk.columns):
+        m_pk = None
+    else:
+        m_pk_columns = [col.name for col in m_pk.columns]
+    try:
+        c_pk = inspector.get_pk_constraint(tname)
+        if not len(c_pk['constrained_columns']):
+            c_pk = None
+        else:
+            c_pk = _make_pk_constraint(c_pk, conn_table)
+            c_pk_columns = [col.name for col in c_pk.columns]
+    except NoSuchTableError:
+        c_pk = None
+
+    if not (m_pk and c_pk):
+        log.warn(
+            "No explicit primary key detected on table '%s'", tname
+        )
+        return
+    elif not (c_pk.name or m_pk.name):
+        # both anonymous constraints
+        return
+
+    if not c_pk and m_pk:
+        diffs.append(("add_constraint", m_pk))
+        log.info("Detected added primary key '%s' on %s",
+            m_pk.name, m_pk_columns
+        )
+    elif c_pk and not m_pk:
+        diffs.append(("remove_constraint", None))
+        log.info("Detected removed primary key '%s' on %s",
+            c_pk.name, c_pk_columns
+        )
+    else:
+        if (m_pk_columns != c_pk_columns or \
+            (m_pk.name and m_pk.name != c_pk.name)):
+            diffs.append(("remove_constraint", c_pk))
+            diffs.append(("add_constraint", m_pk))
+            log.info("Detected changed primary key '%s' on %s, columns: %s",
+                m_pk.name, m_pk.table, m_pk_columns
+            )
 
 def _compare_uniques(schema, tname, object_filters, conn_table,
             metadata_table, diffs, autogen_context, inspector):
@@ -187,7 +242,7 @@ def _compare_uniques(schema, tname, object_filters, conn_table,
         meta_cols = [col.name for col in meta_constraint.columns]
 
         if meta_cols != conn_cols:
-            diffs.append(("remove_constraint", conn_cosntraint))
+            diffs.append(("remove_constraint", conn_constraint))
             diffs.append(("add_constraint", meta_constraint))
             log.info("Detected changed unique constraint '%s' on '%s':%s",
                 key, tname, ' columns %r to %r' % (conn_cols, meta_cols)

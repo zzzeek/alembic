@@ -86,7 +86,18 @@ def _add_fk_constraint(constraint, autogen_context):
     raise NotImplementedError()
 
 def _add_pk_constraint(constraint, autogen_context):
-    raise NotImplementedError()
+    """
+    Generate Alembic operations for the ALTER TABLE ... ADD CONSTRAINT
+    ... PRIMARY KEY (...) of a
+    :class:`~sqlalchemy.schema.PrimaryKeyConstraint` instance.
+    """
+    text = "%(prefix)screate_primary_key('%(name)s', '%(table)s', %(columns)s)" % {
+        'prefix': _alembic_autogenerate_prefix(autogen_context),
+        'name': constraint.name,
+        'table': constraint.table,
+        'columns': [col.name for col in constraint.columns]
+    }
+    return text
 
 def _add_check_constraint(constraint, autogen_context):
     raise NotImplementedError()
@@ -107,7 +118,7 @@ def _add_constraint(constraint, autogen_context):
 def _drop_constraint(constraint, autogen_context):
     """
     Generate Alembic operations for the ALTER TABLE ... DROP CONSTRAINT
-    of a  :class:`~sqlalchemy.schema.UniqueConstraint` instance.
+    of a :class:`~sqlalchemy.schema.UniqueConstraint` instance.
     """
     text = "%(prefix)sdrop_constraint(%(name)r, '%(table)s')" % {
             'prefix': _alembic_autogenerate_prefix(autogen_context),
