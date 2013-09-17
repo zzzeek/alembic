@@ -86,8 +86,16 @@ def _make_unique_constraint(params, conn_table):
 def _compare_columns(schema, tname, object_filters, conn_table, metadata_table,
                                 diffs, autogen_context, inspector):
     name = '%s.%s' % (schema, tname) if schema else tname
-    metadata_cols_by_name = dict((c.name, c) for c in metadata_table.c)
-    conn_col_names = dict((c.name, c) for c in conn_table.c)
+
+    if autogen_context['opts'].get('ignore_case', False):
+        metadata_cols_by_name = dict((c.name.lower(), c) for c in metadata_table.c)
+        conn_col_names = dict((c.name.lower(), c) for c in conn_table.c)
+        conn_cols_by_name = dict((c.name.lower(), c.name) for c in conn_table.c)
+    else:
+        metadata_cols_by_name = dict((c.name, c) for c in metadata_table.c)
+        conn_col_names = dict((c.name, c) for c in conn_table.c)
+        conn_cols_by_name = dict((c.name, c.name) for c in conn_table.c)
+
     metadata_col_names = OrderedSet(sorted(metadata_cols_by_name))
 
     for cname in metadata_col_names.difference(conn_col_names):
@@ -100,36 +108,36 @@ def _compare_columns(schema, tname, object_filters, conn_table, metadata_table,
 
     for cname in set(conn_col_names).difference(metadata_col_names):
         rem_col = sa_schema.Column(
-                    cname,
-                    conn_table.c[cname].type,
-                    nullable=conn_table.c[cname].nullable,
-                    server_default=conn_table.c[cname].server_default
+                    conn_cols_by_name[cname],
+                    conn_table.c[conn_cols_by_name[cname]].type,
+                    nullable=conn_table.c[conn_cols_by_name[cname]].nullable,
+                    server_default=conn_table.c[conn_cols_by_name[cname]].server_default
                 )
-        if _run_filters(rem_col, cname,
+        if _run_filters(rem_col, conn_cols_by_name[cname],
                                 "column", True, None, object_filters):
             diffs.append(
                 ("remove_column", schema, tname, rem_col)
             )
-            log.info("Detected removed column '%s.%s'", name, cname)
+            log.info("Detected removed column '%s.%s'", name, conn_cols_by_name[cname])
 
     for colname in metadata_col_names.intersection(conn_col_names):
         metadata_col = metadata_cols_by_name[colname]
-        conn_col = conn_table.c[colname]
+        conn_col = conn_table.c[conn_cols_by_name[colname]]
         if not _run_filters(
                     metadata_col, colname, "column", False, conn_col, object_filters):
             continue
         col_diff = []
-        _compare_type(schema, tname, colname,
+        _compare_type(schema, tname, conn_cols_by_name[colname],
             conn_col,
             metadata_col,
             col_diff, autogen_context
         )
-        _compare_nullable(schema, tname, colname,
+        _compare_nullable(schema, tname, conn_cols_by_name[colname],
             conn_col,
             metadata_col.nullable,
             col_diff, autogen_context
         )
-        _compare_server_default(schema, tname, colname,
+        _compare_server_default(schema, tname, conn_cols_by_name[colname],
             conn_col,
             metadata_col,
             col_diff, autogen_context
