@@ -251,6 +251,9 @@ def _compare_indexes(schema, tname, object_filters, conn_table,
         conn_exps = [exp.name for exp in conn_index.expressions]
         meta_exps = [exp.name for exp in meta_index.expressions]
 
+        if meta_index.unique is None:
+            meta_index.unique = False
+
         if meta_index.unique is not conn_index.unique \
                 or meta_exps != conn_exps:
             diffs.append(("remove_index", conn_index))
