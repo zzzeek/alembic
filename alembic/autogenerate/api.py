@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 ###################################################
 # public
-def compare_metadata(context, metadata):
+def compare_metadata(context, metadata, only=None):
     """Compare a database schema to that given in a
     :class:`~sqlalchemy.schema.MetaData` instance.
 
@@ -97,11 +97,21 @@ def compare_metadata(context, metadata):
      instance.
     :param metadata: a :class:`~sqlalchemy.schema.MetaData`
      instance.
+    :param only: optional. Compare only a sub-set of available named
+     tables. May be specified as a sequence of names or a callable.
+
+     If a sequence of names is provided, only those tables will be
+     compared.
+
+     If a callable is provided, it will be used as a boolean
+     predicate to filter the list of potential table names. The
+     callable is called with a table name as a positional argument
+     and should return a true value for any table to compare.
 
     """
     autogen_context, connection = _autogen_context(context, None)
     diffs = []
-    _produce_net_changes(connection, metadata, diffs, autogen_context)
+    _produce_net_changes(connection, metadata, diffs, autogen_context, only)
     return diffs
 
 ###################################################
@@ -171,7 +181,14 @@ def _indent(text):
 
 def _produce_net_changes(connection, metadata, diffs, autogen_context,
                             object_filters=(),
-                            include_schemas=False):
+                            include_schemas=False,
+                            only=None):
+
+    def should_be_compared(table_name):
+        return (only is None or
+            (hasattr(only, '__iter__') and table_name in only) or
+            (hasattr(only, '__call__') and only(table_name)))
+
     inspector = Inspector.from_engine(connection)
     # TODO: not hardcode alembic_version here ?
     conn_table_names = set()
@@ -186,12 +203,19 @@ def _produce_net_changes(connection, metadata, diffs, autogen_context,
         schemas = [None]
 
     for s in schemas:
-        tables = set(inspector.get_table_names(schema=s)).\
-                difference(['alembic_version'])
+        tables = set(
+            table_name
+            for table_name in inspector.get_table_names(schema=s)
+            if should_be_compared(table_name)
+        ).difference(['alembic_version'])
+
         conn_table_names.update(zip([s] * len(tables), tables))
 
-    metadata_table_names = OrderedSet([(table.schema, table.name)
-                                for table in metadata.sorted_tables])
+    metadata_table_names = OrderedSet(
+        (table.schema, table.name)
+        for table in metadata.sorted_tables
+        if should_be_compared(table.name)
+    )
 
     _compare_tables(conn_table_names, metadata_table_names,
                     object_filters,
