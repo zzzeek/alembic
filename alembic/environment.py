@@ -624,7 +624,8 @@ class EnvironmentContext(object):
          semicolon between statements like most other backends.
 
         """
-        opts = self.context_opts
+        opts = self.config.get_section(self.config.config_ini_section)
+        opts.update(self.context_opts)
         if transactional_ddl is not None:
             opts["transactional_ddl"] = transactional_ddl
         if output_buffer is not None:
