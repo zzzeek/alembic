@@ -44,19 +44,24 @@ def _render_potential_expr(value, autogen_context):
         return repr(value)
 
 def _add_table(table, autogen_context):
+    args = [col for col in
+            [_render_column(col, autogen_context) for col in table.c]
+        if col] + \
+        sorted([rcons for rcons in
+            [_render_constraint(cons, autogen_context) for cons in
+                table.constraints]
+            if rcons is not None
+        ])
+
+    if len(args) > 255:
+        args = '*[' + ',\n'.join(args) + ']'
+    else:
+        args = ',\n'.join(args)
+
     text = "%(prefix)screate_table(%(tablename)r,\n%(args)s" % {
         'tablename': table.name,
         'prefix': _alembic_autogenerate_prefix(autogen_context),
-        'args': ',\n'.join(
-            [col for col in
-                [_render_column(col, autogen_context) for col in table.c]
-            if col] +
-            sorted([rcons for rcons in
-                [_render_constraint(cons, autogen_context) for cons in
-                    table.constraints]
-                if rcons is not None
-            ])
-        )
+        'args': args,
     }
     if table.schema:
         text += ",\nschema=%r" % table.schema
