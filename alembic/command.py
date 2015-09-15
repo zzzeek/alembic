@@ -302,7 +302,7 @@ def branches(config, verbose=False):
             )
 
 
-def current(config, verbose=False, head_only=False):
+def current(config, verbose=False, head_only=False, include_branches=False):
     """Display the current revision for a database."""
 
     script = ScriptDirectory.from_config(config)
@@ -317,7 +317,7 @@ def current(config, verbose=False, head_only=False):
                 util.obfuscate_url_pw(context.connection.engine.url)
             )
         for rev in script.get_revisions(rev):
-            config.print_stdout(rev.cmd_format(verbose))
+            config.print_stdout(rev.cmd_format(verbose, include_branches=include_branches))
         return []
 
     with EnvironmentContext(
