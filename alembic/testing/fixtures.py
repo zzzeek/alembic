@@ -132,10 +132,10 @@ def op_fixture(
             for stmt in buf.lines:
                 if sql in stmt:
                     return
-            else:
-                assert False, "Could not locate fragment %r in %r" % (
-                    sql,
-                    buf.lines
+
+            assert False, "Could not locate fragment %r in %r" % (
+                sql,
+                buf.lines
                 )
 
     if as_sql:
