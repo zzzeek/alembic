@@ -1397,6 +1397,10 @@ class AlterColumnOp(AlterTableOp):
          .. versionadded:: 0.7.0 'schema' can now accept a
             :class:`~sqlalchemy.sql.elements.quoted_name` construct.
 
+        :param postgresql_using: Optional string.  Can be passed, on
+         PostgreSQL only, when type_ is passed and no implicit cast is
+         available.
+
         """
 
         alt = cls(

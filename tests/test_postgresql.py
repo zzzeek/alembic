@@ -8,6 +8,7 @@ from sqlalchemy.sql import table, column
 from alembic.autogenerate.compare import \
     _compare_server_default, _compare_tables, _render_server_default_for_compare
 
+from alembic import op
 from alembic.operations import ops
 from alembic import command, util
 from alembic.migration import MigrationContext
@@ -17,7 +18,7 @@ from alembic.autogenerate import api
 from alembic.testing import eq_, provide_metadata
 from alembic.testing.env import staging_env, clear_staging_env, \
     _no_sql_testing_config, write_script
-from alembic.testing.fixtures import capture_context_buffer
+from alembic.testing.fixtures import capture_context_buffer, op_fixture
 from alembic.testing.fixtures import TestBase
 
 from alembic.testing import config
@@ -483,3 +484,12 @@ class PostgresqlDetectSerialTest(TestBase):
         )
 
 
+class PostgresqlOpTest(TestBase):
+    __only_on__ = 'postgresql'
+
+    def test_alter_column_type_using(self):
+        context = op_fixture('postgresql')
+        op.alter_column("t", "c", type_=Integer, postgresql_using='c::integer')
+        context.assert_(
+            'ALTER TABLE t ALTER COLUMN c TYPE INTEGER USING c::integer'
+        )
