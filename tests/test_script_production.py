@@ -837,3 +837,51 @@ context.configure(dialect_name='sqlite', template_args={"somearg":"somevalue"})
             contents = open(m.group(1)).read()
             os.remove(m.group(1))
             assert "<% z = x + y %>" in contents
+
+
+class DuplicateVersionLocationsTest(TestBase):
+    def setUp(self):
+        self.env = staging_env()
+        self.cfg = _multi_dir_testing_config(
+            extra_version_location='%(here)s/model1'
+        )
+        self.cfg.set_main_option("revision_environment", "true")
+
+        script = ScriptDirectory.from_config(self.cfg)
+        self.model1 = util.rev_id()
+        self.model2 = util.rev_id()
+        self.model3 = util.rev_id()
+        for model, name in [
+            (self.model1, "model1"),
+            (self.model2, "model2"),
+            (self.model3, "model3"),
+        ]:
+            script.generate_revision(
+                model, name, refresh=True,
+                version_path=os.path.join(_get_staging_directory(), name),
+                head="base")
+
+            write_script(script, model, """\
+"%s"
+revision = '%s'
+down_revision = None
+branch_labels = ['%s']
+
+from alembic import op
+
+def upgrade():
+    pass
+
+def downgrade():
+    pass
+
+""" % (name, model, name))
+
+    def tearDown(self):
+        clear_staging_env()
+
+    def test_script_listing(self):
+        m = sa.MetaData()
+
+        script = ScriptDirectory.from_config(self.cfg)
+        command.upgrade(self.cfg, "heads")
