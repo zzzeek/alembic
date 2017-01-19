@@ -181,6 +181,41 @@ def _render_migration_diffs(context, template_args):
     )
 
 
+def generate_revision_from_script(config, migration_script):
+    from ..script import ScriptDirectory
+    script_directory = ScriptDirectory.from_config(config)
+
+    command_args = dict(
+        message=migration_script.message,
+        autogenerate=False,
+        sql=False,
+        head=migration_script.head or "head",
+        splice=migration_script.splice,
+        branch_label=migration_script.branch_label,
+        version_path=migration_script.version_path,
+        rev_id=util.rev_id(),
+        depends_on=migration_script.depends_on
+    )
+
+    revision_context = RevisionContext(
+        config, script_directory, command_args)
+
+    revision_context._last_autogen_context = AutogenContext(
+        None, opts={
+            'sqlalchemy_module_prefix': 'sa.',
+            'alembic_module_prefix': 'op.',
+            'user_module_prefix': None,
+        }, autogenerate=False)
+
+    revision_context.generated_revisions[0].upgrade_ops = migration_script.upgrade_ops
+    revision_context.generated_revisions[0].downgrade_ops = migration_script.downgrade_ops
+    revision_context.generated_revisions[0]._needs_render = True
+
+    migration_script = revision_context.generated_revisions[0]
+
+    return revision_context._to_script(migration_script)
+
+
 class AutogenContext(object):
     """Maintains configuration and state that's specific to an
     autogenerate operation."""
