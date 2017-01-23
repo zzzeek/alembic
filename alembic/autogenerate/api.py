@@ -376,8 +376,8 @@ class RevisionContext(object):
             if self.command_args['sql']:
                 raise util.CommandError(
                     "Using --sql with --autogenerate does not make any sense")
-            if set(self.script_directory.get_revisions(rev)) != \
-                    set(self.script_directory.get_revisions("heads")):
+            if not set(self.script_directory.get_revisions(rev)).issubset(
+                    set(self.script_directory.get_revisions("heads"))):
                 raise util.CommandError("Target database is not up to date.")
 
         upgrade_token = migration_context.opts['upgrade_token']
