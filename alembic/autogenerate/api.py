@@ -182,8 +182,17 @@ def _render_migration_diffs(context, template_args):
 
 
 def generate_revision_from_script(config, migration_script):
+    """Generate a revision from a provided :class:`.MigrationScript`
+
+    :param config: a :class:`.Config` instance.
+    :param migration_script: a :class:`.MigrationScript`
+     instance.
+    """
     from ..script import ScriptDirectory
+
     script_directory = ScriptDirectory.from_config(config)
+
+    migration_script.rev_id = util.rev_id()
 
     command_args = dict(
         message=migration_script.message,
@@ -193,7 +202,7 @@ def generate_revision_from_script(config, migration_script):
         splice=migration_script.splice,
         branch_label=migration_script.branch_label,
         version_path=migration_script.version_path,
-        rev_id=util.rev_id(),
+        rev_id=migration_script.rev_id,
         depends_on=migration_script.depends_on
     )
 
@@ -207,13 +216,10 @@ def generate_revision_from_script(config, migration_script):
             'user_module_prefix': None,
         }, autogenerate=False)
 
-    revision_context.generated_revisions[0].upgrade_ops = migration_script.upgrade_ops
-    revision_context.generated_revisions[0].downgrade_ops = migration_script.downgrade_ops
-    revision_context.generated_revisions[0]._needs_render = True
+    migration_script._needs_render = True
+    revision_context.generated_revisions[0] = migration_script
 
-    migration_script = revision_context.generated_revisions[0]
-
-    return revision_context._to_script(migration_script)
+    return revision_context._to_script(revision_context.generated_revisions[0])
 
 
 class AutogenContext(object):

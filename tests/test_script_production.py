@@ -901,3 +901,41 @@ def downgrade():
                 [rev.revision for rev in script.walk_revisions()],
                 [self.model1, self.model2, self.model3]
             )
+
+
+class ProgrammaticGenerationTest(TestBase):
+
+    def setup(self):
+        staging_env()
+        self.cfg = _no_sql_testing_config(
+            directives="\nrevision_environment=true\n"
+        )
+
+    def tearDown(self):
+        clear_staging_env()
+
+    def test_gen_revision_from_script(self):
+        migration_script = ops.MigrationScript(
+            rev_id=None,
+            message='add test table',
+            upgrade_ops=ops.UpgradeOps(
+                ops=[
+                    ops.CreateTableOp(
+                        'test_table',
+                        [
+                            sa.Column('id', sa.Integer(), primary_key=True),
+                            sa.Column('name', sa.String(50), nullable=False)
+                        ]
+                    ),
+                ]
+            ),
+            downgrade_ops=ops.DowngradeOps(
+                ops=[
+                    ops.DropTableOp('test_table')
+                ]
+            ),
+        )
+
+        rev = autogenerate.api.generate_revision_from_script(self.cfg, migration_script)
+
+        assert os.access(rev.path, os.F.OK)
