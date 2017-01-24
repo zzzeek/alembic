@@ -181,7 +181,12 @@ def _render_migration_diffs(context, template_args):
     )
 
 
-def generate_revision_from_script(config, migration_script):
+def generate_revision_from_script(
+    config,
+    migration_script,
+    sqlalchemy_module_prefix='sa.',
+    alembic_module_prefix='op.',
+):
     """Generate a revision from a provided :class:`.MigrationScript`
 
     :param config: a :class:`.Config` instance.
@@ -211,8 +216,8 @@ def generate_revision_from_script(config, migration_script):
 
     revision_context._last_autogen_context = AutogenContext(
         None, opts={
-            'sqlalchemy_module_prefix': 'sa.',
-            'alembic_module_prefix': 'op.',
+            'sqlalchemy_module_prefix': sqlalchemy_module_prefix,
+            'alembic_module_prefix': alembic_module_prefix,
             'user_module_prefix': None,
         }, autogenerate=False)
 
