@@ -1374,6 +1374,22 @@ unique=False, """
         )
 
     @config.requirements.sqlalchemy_09
+    def test_repr_dialect_postgres_array_type(self):
+        from sqlalchemy.dialects.postgresql import ARRAY, INTEGER
+
+        type_ = ARRAY(INTEGER)
+
+        self.autogen_context.opts['user_module_prefix'] = None
+
+        eq_ignore_whitespace(
+            autogenerate.render._repr_type(type_, self.pg_autogen_context),
+            "postgresql.ARRAY(sa.INTEGER())"
+        )
+        eq_(self.pg_autogen_context.imports,
+            set(['from sqlalchemy.dialects import postgresql'])
+            )
+
+    @config.requirements.sqlalchemy_09
     def test_repr_dialect_type(self):
         from sqlalchemy.dialects.mysql import VARCHAR
 
