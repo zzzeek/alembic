@@ -2037,4 +2037,3 @@ class MigrationScript(MigrateOperation):
 
         """
         return self._downgrade_ops
-

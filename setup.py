@@ -16,6 +16,7 @@ requires = [
     'SQLAlchemy>=0.7.6',
     'Mako',
     'python-editor>=0.3',
+    'autopep8>=1.2.4'
 ]
 
 try:
