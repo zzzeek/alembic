@@ -6,7 +6,7 @@ from ..util.compat import string_types
 from .. import util
 from mako.pygen import PythonPrinter
 from ..util.compat import StringIO
-
+import autopep8
 
 MAX_PYTHON_ARGS = 255
 
@@ -66,7 +66,7 @@ def _render_cmd_body(op_container, autogen_context):
 
     printer.writeline("# ### end Alembic commands ###")
 
-    return buf.getvalue()
+    return autopep8.fix_code(buf.getvalue())
 
 
 def render_op(autogen_context, op):
