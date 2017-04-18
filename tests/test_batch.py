@@ -665,6 +665,42 @@ class BatchAPITest(TestBase):
                 self.mock_schema.ForeignKeyConstraint())]
         )
 
+    def test_create_fk_same_tablename_in_different_schemas(self):
+        with self._fixture(schema='foo') as batch:
+            batch.create_foreign_key('myfk', 'tname', ['x'], ['y'], referent_schema='bar')
+
+        eq_(
+            self.mock_schema.ForeignKeyConstraint.mock_calls,
+            [
+                mock.call(
+                    ['x'], ['bar.tname.y'],
+                    onupdate=None, ondelete=None, name='myfk',
+                    initially=None, deferrable=None, match=None)
+            ]
+        )
+        eq_(
+            self.mock_schema.Table.mock_calls,
+            [
+                mock.call(
+                    'tname', self.mock_schema.MetaData(),
+                    self.mock_schema.Column(),
+                    schema='bar'
+                ),
+                mock.call(
+                    'tname', self.mock_schema.MetaData(),
+                    self.mock_schema.Column(),
+                    schema='foo'
+                ),
+                mock.call().append_constraint(
+                    self.mock_schema.ForeignKeyConstraint())
+            ]
+        )
+        eq_(
+            batch.impl.operations.impl.mock_calls,
+            [mock.call.add_constraint(
+                self.mock_schema.ForeignKeyConstraint())]
+        )
+
     def test_create_uq(self):
         with self._fixture() as batch:
             batch.create_unique_constraint('uq1', ['a', 'b'])
