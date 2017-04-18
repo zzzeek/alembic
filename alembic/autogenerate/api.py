@@ -317,8 +317,8 @@ class AutogenContext(object):
         for fn in self._object_filters:
             if not fn(object_, name, type_, reflected, compare_to):
                 return False
-        else:
-            return True
+
+        return True
 
     @util.memoized_property
     def sorted_tables(self):

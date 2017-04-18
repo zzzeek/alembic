@@ -23,8 +23,8 @@ class SQLiteImpl(DefaultImpl):
         for op in batch_op.batch:
             if op[0] not in ('add_column', 'create_index', 'drop_index'):
                 return True
-        else:
-            return False
+
+        return False
 
     def add_constraint(self, const):
         # attempt to distinguish between an

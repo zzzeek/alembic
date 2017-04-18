@@ -304,8 +304,8 @@ class Dispatcher(object):
             elif (spcls, 'default') in self._registry:
                 return self._fn_or_list(
                     self._registry[(spcls, 'default')])
-        else:
-            raise ValueError("no dispatch function for object: %s" % obj)
+
+        raise ValueError("no dispatch function for object: %s" % obj)
 
     def _fn_or_list(self, fn_or_list):
         if self.uselist:

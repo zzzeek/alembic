@@ -69,8 +69,8 @@ class compound(object):
         for predicate in self.skips.union(self.fails):
             if predicate(config):
                 return False
-        else:
-            return True
+
+        return True
 
     def matching_config_reasons(self, config):
         return [
