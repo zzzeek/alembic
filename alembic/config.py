@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from contextlib import contextmanager
 from .util.compat import SafeConfigParser
 import inspect
 import os
@@ -473,10 +474,33 @@ class CommandLine(object):
             self.run_cmd(cfg, options)
 
 
+@contextmanager
+def suppress_broken_pipe_warning():
+    # This try..finally dance is used to prevent Python 3 printing
+    # "Exception ignored ... BrokenPipeError" on interpreter shutdown
+    # if alembic is piped to something that closes the pipe early.
+    #
+    # See http://bugs.python.org/issue11380,#msg248579
+    try:
+        yield
+    finally:
+        try:
+            sys.stdout.flush()
+        finally:
+            try:
+                sys.stdout.close()
+            finally:
+                try:
+                    sys.stderr.flush()
+                finally:
+                    sys.stderr.close()
+
+
 def main(argv=None, prog=None, **kwargs):
     """The console runner function for Alembic."""
 
-    CommandLine(prog=prog).main(argv=argv)
+    with suppress_broken_pipe_warning():
+        CommandLine(prog=prog).main(argv=argv)
 
 if __name__ == '__main__':
     main()
