@@ -539,6 +539,10 @@ def _render_column(column, autogen_context):
     if column.nullable is not None:
         opts.append(("nullable", column.nullable))
 
+    # support the comment value
+    if column.comment is not None:
+        opts.append(("comment", "'{}'".format(column.comment)))
+
     # TODO: for non-ascii colname, assign a "key"
     return "%(prefix)sColumn(%(name)r, %(type)s, %(kw)s)" % {
         'prefix': _sqlalchemy_autogenerate_prefix(autogen_context),
