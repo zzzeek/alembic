@@ -523,6 +523,54 @@ class AutogenRenderTest(TestBase):
             "type_='unique', if_exists=True)",
         )
 
+    def test_drop_constraint_unnamed(self):
+        """test #916"""
+
+        op_obj = ops.DropConstraintOp(None, "test", type_="foreignkey")
+        with assertions.expect_warnings(
+            "Autogenerate rendered a drop_constraint\\(\\) directive for an "
+            "unnamed constraint on table 'test'"
+        ):
+            eq_(
+                autogenerate.render_op_text(self.autogen_context, op_obj),
+                "# WARNING: constraint name is None; this directive will "
+                "fail as\n"
+                "# rendered.  Add a name, or use a naming convention; see\n"
+                "# https://alembic.sqlalchemy.org/en/latest/naming.html\n"
+                "op.drop_constraint(None, 'test', type_='foreignkey')",
+            )
+
+    def test_drop_constraint_unnamed_batch(self):
+        """test #916"""
+
+        op_obj = ops.DropConstraintOp(None, "test", type_="foreignkey")
+        with self.autogen_context._within_batch():
+            with assertions.expect_warnings(
+                "Autogenerate rendered a drop_constraint\\(\\) directive for "
+                "an unnamed constraint on table 'test'"
+            ):
+                eq_(
+                    autogenerate.render_op_text(self.autogen_context, op_obj),
+                    "# WARNING: constraint name is None; this directive will "
+                    "fail as\n"
+                    "# rendered.  Add a name, or use a naming convention; "
+                    "see\n"
+                    "# https://alembic.sqlalchemy.org/en/latest/naming.html\n"
+                    "batch_op.drop_constraint(None, type_='foreignkey')",
+                )
+
+    def test_drop_constraint_named_no_warning(self):
+        """test #916"""
+
+        t = self.table()
+        uq = UniqueConstraint(t.c.code, name="uq_test_code")
+        op_obj = ops.DropConstraintOp.from_constraint(uq)
+        with assertions.expect_warnings():
+            eq_(
+                autogenerate.render_op_text(self.autogen_context, op_obj),
+                "op.drop_constraint('uq_test_code', 'test', type_='unique')",
+            )
+
     def test_add_fk_constraint(self):
         m = MetaData()
         Table("a", m, Column("id", Integer, primary_key=True))

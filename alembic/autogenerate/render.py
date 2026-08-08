@@ -50,6 +50,12 @@ if TYPE_CHECKING:
 
 MAX_PYTHON_ARGS = 255
 
+_UNNAMED_CONSTRAINT_WARNING = [
+    "# WARNING: constraint name is None; this directive will fail as",
+    "# rendered.  Add a name, or use a naming convention; see",
+    "# https://alembic.sqlalchemy.org/en/latest/naming.html",
+]
+
 
 def _render_gen_name(
     autogen_context: AutogenContext,
@@ -456,7 +462,7 @@ def _add_check_constraint(
 @renderers.dispatch_for(ops.DropConstraintOp)
 def _drop_constraint(
     autogen_context: AutogenContext, op: ops.DropConstraintOp
-) -> str:
+) -> list[str]:
     prefix = _alembic_autogenerate_prefix(autogen_context)
     name = _render_gen_name(autogen_context, op.constraint_name)
     schema = _ident(op.schema) if op.schema else None
@@ -473,7 +479,20 @@ def _drop_constraint(
     if if_exists is not None:
         params_strs.append(f"if_exists={if_exists}")
 
-    return f"{prefix}drop_constraint({', '.join(params_strs)})"
+    lines = []
+    if name is None:
+        util.warn(
+            "Autogenerate rendered a drop_constraint() directive for an "
+            "unnamed constraint on table "
+            f"{op.table_name!r}; the migration will fail unless a "
+            "constraint name is added to the directive.  Consider using a "
+            "naming convention so that constraint names are known ahead of "
+            "time."
+        )
+        lines.extend(_UNNAMED_CONSTRAINT_WARNING)
+
+    lines.append(f"{prefix}drop_constraint({', '.join(params_strs)})")
+    return lines
 
 
 @renderers.dispatch_for(ops.AddColumnOp)
