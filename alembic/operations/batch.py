@@ -22,6 +22,7 @@ from sqlalchemy.util import topological
 
 from ..util import exc
 from ..util.sqla_compat import _columns_for_constraint
+from ..util.sqla_compat import _conv_constraint_names
 from ..util.sqla_compat import _copy
 from ..util.sqla_compat import _copy_expression
 from ..util.sqla_compat import _ensure_scope_for_ddl
@@ -30,6 +31,7 @@ from ..util.sqla_compat import _fk_target_tokens
 from ..util.sqla_compat import _get_table_key
 from ..util.sqla_compat import _idx_table_bound_expressions
 from ..util.sqla_compat import _is_type_bound
+from ..util.sqla_compat import _name_type_bound_constraints
 from ..util.sqla_compat import _remove_column_from_collection
 from ..util.sqla_compat import _resolve_for_variant
 from ..util.sqla_compat import constraint_name_defined
@@ -111,10 +113,7 @@ class BatchOperationsImpl:
                     fn = getattr(self.operations.impl, opname)
                     fn(*arg, **kw)
             else:
-                if self.naming_convention:
-                    m1 = MetaData(naming_convention=self.naming_convention)
-                else:
-                    m1 = MetaData()
+                m1 = MetaData()
 
                 if self.copy_from is not None:
                     existing_table = self.copy_from
@@ -144,6 +143,19 @@ class BatchOperationsImpl:
                         **self.reflect_kwargs,
                     )
                     reflected = True
+
+                    if self.naming_convention:
+                        # names that came back from reflection are already
+                        # the names that are in the database, so mark them
+                        # as final; the naming convention is then applied
+                        # only to those constraints that were reflected
+                        # without a name, which is what this parameter is
+                        # for.  see the docstring for
+                        # sqlalchemy.schema.conv.
+                        _conv_constraint_names(existing_table)
+                        existing_table = existing_table.to_metadata(
+                            MetaData(naming_convention=self.naming_convention)
+                        )
 
                 batch_impl = ApplyBatchImpl(
                     self.impl,
@@ -332,6 +344,12 @@ class ApplyBatchImpl:
             schema=schema,
             **self.table_kwargs,
         )
+
+        # CHECK constraints regenerated on the new table by a SchemaType
+        # such as Boolean or Enum are named using the naming convention of
+        # the table being replaced; the new table is under a temporary name
+        # at this point so it can't supply the convention itself.
+        _name_type_bound_constraints(new_table, self.table)
 
         for const in (
             list(self.named_constraints.values()) + self.unnamed_constraints
@@ -605,7 +623,19 @@ class ApplyBatchImpl:
         )
         # we copy the column because operations.add_column()
         # gives us a Column that is part of a Table already.
-        self.columns[column.name] = _copy(column, schema=self.table.schema)
+        col_copy = _copy(column, schema=self.table.schema)
+
+        # turn off eventing rules for a SchemaType such as Boolean / Enum,
+        # so that the type doesn't emit its own CHECK constraint onto the
+        # new table.  Operations.implementation_for(add_column) already
+        # emits an add_constraint() for this constraint, which is where
+        # the naming convention has been applied.
+        if isinstance(col_copy.type, SchemaEventTarget):
+            col_copy.type._create_events = (  # type: ignore[attr-defined]
+                col_copy.type.create_constraint  # type: ignore[attr-defined]
+            ) = False
+
+        self.columns[column.name] = col_copy
         self.column_transfers[column.name] = {}
 
     def drop_column(

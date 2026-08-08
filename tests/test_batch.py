@@ -41,6 +41,7 @@ from alembic.testing import config
 from alembic.testing import eq_
 from alembic.testing import exclusions
 from alembic.testing import expect_raises_message
+from alembic.testing import expect_warnings
 from alembic.testing import is_
 from alembic.testing import mock
 from alembic.testing import TestBase
@@ -2443,6 +2444,218 @@ class BatchRoundTripPostgresqlTest(BatchRoundTripTest):
             ],
             [Boolean],
         )
+
+
+class BatchNamingConventionTest(TestBase):
+    """test the interaction of naming conventions with batch "recreate".
+
+    See #1768, #1844, #1845.
+
+    """
+
+    __only_on__ = "sqlite"
+
+    naming_convention = {
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+
+    def setUp(self):
+        self.conn = config.db.connect()
+
+    def tearDown(self):
+        m = MetaData()
+        m.reflect(self.conn)
+        _safe_commit_connection_transaction(self.conn)
+        with self.conn.begin():
+            m.drop_all(self.conn)
+        self.conn.close()
+
+    def _fixture(self, *cols, naming_convention=True):
+        if naming_convention:
+            m = MetaData(naming_convention=self.naming_convention)
+        else:
+            m = MetaData()
+        t = Table("user", m, Column("id", Integer, primary_key=True), *cols)
+        with self.conn.begin():
+            t.create(self.conn)
+        return t
+
+    def _op_fixture(self, metadata):
+        return Operations(
+            MigrationContext.configure(
+                self.conn, opts={"target_metadata": metadata}
+            )
+        )
+
+    def _ck_constraints(self):
+        return sorted(
+            (c["name"], c["sqltext"])
+            for c in inspect(self.conn).get_check_constraints("user")
+        )
+
+    def test_add_column_boolean(self):
+        """#1768"""
+
+        t = self._fixture()
+        op = self._op_fixture(t.metadata)
+
+        with op.batch_alter_table(
+            "user", naming_convention=self.naming_convention
+        ) as batch_op:
+            batch_op.add_column(
+                Column(
+                    "is_active",
+                    Boolean(create_constraint=True, name="is_active"),
+                    nullable=False,
+                    server_default="1",
+                )
+            )
+
+        eq_(
+            self._ck_constraints(),
+            [("ck_user_is_active", "is_active IN (0, 1)")],
+        )
+
+    def test_add_column_enum(self):
+        """#1768"""
+
+        t = self._fixture()
+        op = self._op_fixture(t.metadata)
+
+        with op.batch_alter_table(
+            "user", naming_convention=self.naming_convention
+        ) as batch_op:
+            batch_op.add_column(
+                Column(
+                    "status",
+                    Enum("a", "b", create_constraint=True, name="status"),
+                    nullable=False,
+                    server_default="a",
+                )
+            )
+
+        eq_(
+            self._ck_constraints(),
+            [("ck_user_status", "status IN ('a', 'b')")],
+        )
+
+    def test_add_column_boolean_no_convention(self):
+        """#1768, the type's own name is used when there's no convention"""
+
+        t = self._fixture(naming_convention=False)
+        op = self._op_fixture(t.metadata)
+
+        with op.batch_alter_table("user") as batch_op:
+            batch_op.add_column(
+                Column(
+                    "is_active",
+                    Boolean(create_constraint=True, name="is_active"),
+                    nullable=False,
+                    server_default="1",
+                )
+            )
+
+        eq_(self._ck_constraints(), [("is_active", "is_active IN (0, 1)")])
+
+    def test_type_bound_constraint_name_preserved(self):
+        """#1844"""
+
+        t = self._fixture(
+            Column(
+                "is_active", Boolean(create_constraint=True, name="is_active")
+            )
+        )
+        eq_(
+            self._ck_constraints(),
+            [("ck_user_is_active", "is_active IN (0, 1)")],
+        )
+
+        op = self._op_fixture(t.metadata)
+        with op.batch_alter_table(
+            "user", copy_from=t, recreate="always"
+        ) as batch_op:
+            batch_op.add_column(Column("y", Integer))
+
+        eq_(
+            self._ck_constraints(),
+            [("ck_user_is_active", "is_active IN (0, 1)")],
+        )
+
+    def test_unnamed_type_bound_constraint_warns(self):
+        """#1844, the convention can't name a constraint whose type has no
+        name of its own; the constraint stays unnamed and a warning refers
+        the user to naming the type"""
+
+        # the table can't be created from this Table object; SQLAlchemy
+        # raises for the unnamed constraint in the same way.  it can
+        # however be an existing table that's now being migrated.
+        with self.conn.begin():
+            self.conn.exec_driver_sql(
+                "CREATE TABLE user (id INTEGER NOT NULL, "
+                "is_active BOOLEAN, "
+                "CONSTRAINT pk_user PRIMARY KEY (id), "
+                "CHECK (is_active IN (0, 1)))"
+            )
+        m = MetaData(naming_convention=self.naming_convention)
+        t = Table(
+            "user",
+            m,
+            Column("id", Integer, primary_key=True),
+            Column("is_active", Boolean(create_constraint=True)),
+        )
+
+        op = self._op_fixture(t.metadata)
+        with expect_warnings(
+            "The CHECK constraint generated by the type of column "
+            "'user.is_active' has no name"
+        ):
+            with op.batch_alter_table(
+                "user", copy_from=t, recreate="always"
+            ) as batch_op:
+                batch_op.add_column(Column("y", Integer))
+
+        eq_(self._ck_constraints(), [(None, "is_active IN (0, 1)")])
+
+    def test_reflected_constraint_name_preserved(self):
+        """#1845"""
+
+        self._fixture(
+            Column("age", Integer),
+            CheckConstraint("age > 0", name="positive_age"),
+        )
+        eq_(self._ck_constraints(), [("ck_user_positive_age", "age > 0")])
+
+        op = self._op_fixture(None)
+        with op.batch_alter_table(
+            "user",
+            naming_convention=self.naming_convention,
+            recreate="always",
+        ) as batch_op:
+            batch_op.add_column(Column("y", Integer))
+
+        eq_(self._ck_constraints(), [("ck_user_positive_age", "age > 0")])
+
+    def test_reflected_unnamed_constraint_named(self):
+        """#1845, the convention still names constraints that come back
+        from reflection with no name"""
+
+        self._fixture(
+            Column("age", Integer),
+            CheckConstraint("age > 0"),
+            naming_convention=False,
+        )
+        eq_(self._ck_constraints(), [(None, "age > 0")])
+
+        op = self._op_fixture(None)
+        with op.batch_alter_table(
+            "user",
+            naming_convention={"ck": "ck_%(table_name)s_ck"},
+            recreate="always",
+        ) as batch_op:
+            batch_op.add_column(Column("y", Integer))
+
+        eq_(self._ck_constraints(), [("ck_user_ck", "age > 0")])
 
 
 class OfflineTest(TestBase):

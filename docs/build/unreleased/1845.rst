@@ -1,0 +1,12 @@
+.. change::
+    :tags: bug, batch
+    :tickets: 1845
+
+    Fixed bug in batch mode where the
+    :paramref:`.Operations.batch_alter_table.naming_convention` parameter
+    would re-generate the names of constraints that already had a name when
+    reflected, in the case where the convention included the
+    ``%(constraint_name)s`` token, leading to a name that included the
+    convention's own prefix twice.  The convention is now applied only to
+    those constraints that are reflected without a name, which is the use
+    case the parameter is documented for.
