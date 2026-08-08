@@ -20,6 +20,7 @@ from sqlalchemy.sql.schema import SchemaEventTarget
 from sqlalchemy.util import OrderedDict
 from sqlalchemy.util import topological
 
+from .. import util
 from ..util import exc
 from ..util.sqla_compat import _columns_for_constraint
 from ..util.sqla_compat import _conv_constraint_names
@@ -269,6 +270,17 @@ class ApplyBatchImpl:
         self.indexes: dict[str, Index] = {}
         self.new_indexes: dict[str, Index] = {}
 
+        # a reflected CHECK constraint that has no name can't be linked
+        # to the column or datatype it applies to, so it is omitted from
+        # the recreate; the documented remedy is to restate it using
+        # batch_alter_table.table_args.  Individual constraints can't be
+        # matched up to those that were passed, as the reflected text is
+        # normalized by the database, so the presence of any CheckConstraint
+        # in table_args is taken to mean the case has been dealt with.
+        check_constraints_in_table_args = any(
+            isinstance(arg, CheckConstraint) for arg in self.table_args
+        )
+
         for const in self.table.constraints:
             if _is_type_bound(const):
                 continue
@@ -280,7 +292,16 @@ class ApplyBatchImpl:
                 # TODO: we are skipping unnamed reflected CheckConstraint
                 # because
                 # we have no way to determine _is_type_bound() for these.
-                pass
+                # warn, as the constraint is otherwise dropped from the
+                # table without any indication that this has occurred.
+                if not check_constraints_in_table_args:
+                    util.warn(
+                        f"Unnamed CHECK constraint on reflected table "
+                        f"'{self.table.name}' is being omitted from the "
+                        f"table recreate; pass the constraint explicitly "
+                        f"using batch_alter_table.table_args.  Naming CHECK "
+                        f"constraints avoids this going forward."
+                    )
             elif constraint_name_string(const.name):
                 self.named_constraints[const.name] = const
             else:

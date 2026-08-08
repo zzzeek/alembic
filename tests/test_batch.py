@@ -2658,6 +2658,112 @@ class BatchNamingConventionTest(TestBase):
         eq_(self._ck_constraints(), [("ck_user_ck", "age > 0")])
 
 
+class BatchUnnamedCheckConstraintTest(TestBase):
+    """test that the omission of unnamed reflected CHECK constraints from a
+    table recreate is warned on.
+
+    See #1846.
+
+    """
+
+    __only_on__ = "sqlite"
+
+    def setUp(self):
+        self.conn = config.db.connect()
+
+    def tearDown(self):
+        m = MetaData()
+        m.reflect(self.conn)
+        _safe_commit_connection_transaction(self.conn)
+        with self.conn.begin():
+            m.drop_all(self.conn)
+        self.conn.close()
+
+    def _fixture(self, *cols):
+        m = MetaData()
+        t = Table("foo", m, Column("id", Integer, primary_key=True), *cols)
+        with self.conn.begin():
+            t.create(self.conn)
+        return t
+
+    def _check_constraints(self):
+        return sorted(
+            (c["name"], c["sqltext"])
+            for c in inspect(self.conn).get_check_constraints("foo")
+        )
+
+    def _recreate(self):
+        op = Operations(MigrationContext.configure(self.conn))
+        with op.batch_alter_table("foo", recreate="always") as batch_op:
+            batch_op.add_column(Column("y", Integer))
+
+    def test_unnamed_check_constraint_warns(self):
+        self._fixture(Column("x", Integer), CheckConstraint("x > 5"))
+        eq_(self._check_constraints(), [(None, "x > 5")])
+
+        with expect_warnings(
+            "Unnamed CHECK constraint on reflected table 'foo' is being "
+            "omitted from the table recreate"
+        ):
+            self._recreate()
+
+        eq_(self._check_constraints(), [])
+
+    def test_unnamed_type_bound_check_constraint_warns(self):
+        self._fixture(Column("val", Boolean(create_constraint=True)))
+        eq_(self._check_constraints(), [(None, "val IN (0, 1)")])
+
+        with expect_warnings(
+            "Unnamed CHECK constraint on reflected table 'foo' is being "
+            "omitted from the table recreate"
+        ):
+            self._recreate()
+
+        eq_(self._check_constraints(), [])
+
+    def test_named_check_constraint_no_warning(self):
+        """a named constraint is carried over, and doesn't warn"""
+
+        self._fixture(
+            Column("x", Integer), CheckConstraint("x > 5", name="ck1")
+        )
+
+        self._recreate()
+
+        eq_(self._check_constraints(), [("ck1", "x > 5")])
+
+    def test_named_type_no_warning(self):
+        """a named datatype is carried over, and doesn't warn"""
+
+        self._fixture(
+            Column("val", Boolean(create_constraint=True, name="ck1"))
+        )
+
+        self._recreate()
+
+        eq_(self._check_constraints(), [("ck1", "val IN (0, 1)")])
+
+    def test_table_args_workaround_no_warning(self):
+        """the documented workaround restates the constraint explicitly.
+
+        as any CheckConstraint passed in table_args indicates the case has
+        been dealt with, no warning is emitted.
+
+        """
+
+        self._fixture(Column("x", Integer), CheckConstraint("x > 5"))
+
+        op = Operations(MigrationContext.configure(self.conn))
+        with op.batch_alter_table(
+            "foo",
+            recreate="always",
+            table_args=[CheckConstraint("x > 5")],
+        ) as batch_op:
+            batch_op.add_column(Column("y", Integer))
+
+        eq_(self._check_constraints(), [(None, "x > 5")])
+
+
 class OfflineTest(TestBase):
     @testing.fixture
     def no_reflect_batch_fixture(self):

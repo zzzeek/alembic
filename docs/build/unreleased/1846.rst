@@ -1,0 +1,14 @@
+.. change::
+    :tags: usecase, batch
+    :tickets: 1846
+
+    Added a warning for the case where an unnamed CHECK constraint on a
+    reflected table is omitted from a batch "recreate" operation.  An unnamed
+    CHECK constraint can't be reliably carried over in a batch recreate
+    as it may refer to columns that are being dropped or changed.  This
+    omission was previously a silent operation.   The presence of any
+    :class:`~sqlalchemy.schema.CheckConstraint` in
+    :paramref:`.Operations.batch_alter_table.table_args` is taken to indicate
+    that the case has been accommodated, and no warning is emitted.
+
+
