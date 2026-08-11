@@ -105,23 +105,11 @@ class DefaultRequirements(SuiteRequirements):
 
     @property
     def fk_ondelete_is_reflected(self):
-        def go(config):
-            if exclusions.against(config, "mssql"):
-                return not sqla_compat.sqla_14_26
-            else:
-                return False
-
-        return exclusions.fails_if(go)
+        return exclusions.open()
 
     @property
     def fk_onupdate_is_reflected(self):
-        def go(config):
-            if exclusions.against(config, "mssql"):
-                return not sqla_compat.sqla_14_26
-            else:
-                return False
-
-        return self.fk_onupdate + exclusions.fails_if(go)
+        return self.fk_onupdate
 
     @property
     def fk_onupdate(self):
@@ -389,21 +377,11 @@ class DefaultRequirements(SuiteRequirements):
             lambda _: compat.py314, "python 3.14 is required"
         )
 
-        sqlalchemy = exclusions.only_if(
-            lambda _: sqla_compat.sqla_2, "sqlalchemy 2 is required"
-        )
-
-        return imports + version_low + sqlalchemy
+        return imports + version_low
 
     @property
     def reflect_indexes_with_expressions(self):
-        sqlalchemy = exclusions.only_if(
-            lambda _: sqla_compat.sqla_2, "sqlalchemy 2 is required"
-        )
-
-        postgresql = exclusions.only_on(["postgresql"])
-
-        return sqlalchemy + postgresql
+        return exclusions.only_on(["postgresql"])
 
     @property
     def indexes_with_expressions(self):

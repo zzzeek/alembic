@@ -5,7 +5,6 @@ from pathlib import Path
 import shutil
 import textwrap
 
-from sqlalchemy.testing import config
 from sqlalchemy.testing import provision
 
 from . import util as testing_util
@@ -111,26 +110,23 @@ config = context.config
         f.write(txt)
 
 
-def _sqlite_file_db(tempname="foo.db", future=False, scope=None, **options):
+def _sqlite_file_db(tempname="foo.db", scope=None, **options):
     dir_ = _join_path(_get_staging_directory(), "scripts")
     url = "sqlite:///%s/%s" % (dir_, tempname)
     if scope:
         options["scope"] = scope
-    return testing_util.testing_engine(url=url, future=future, options=options)
+    return testing_util.testing_engine(url=url, options=options)
 
 
-def _sqlite_testing_config(sourceless=False, future=False):
+def _sqlite_testing_config(sourceless=False):
     dir_ = _join_path(_get_staging_directory(), "scripts")
     url = f"sqlite:///{dir_}/foo.db"
-
-    sqlalchemy_future = future or ("future" in config.db.__class__.__module__)
 
     return _write_config_file(f"""
 [alembic]
 script_location = {dir_}
 sqlalchemy.url = {url}
 sourceless = {"true" if sourceless else "false"}
-{"sqlalchemy.future = true" if sqlalchemy_future else ""}
 
 [loggers]
 keys = root,sqlalchemy
@@ -165,7 +161,6 @@ datefmt = %%H:%%M:%%S
 
 def _multi_dir_testing_config(sourceless=False, extra_version_location=""):
     dir_ = _join_path(_get_staging_directory(), "scripts")
-    sqlalchemy_future = "future" in config.db.__class__.__module__
 
     url = "sqlite:///%s/foo.db" % dir_
 
@@ -173,7 +168,6 @@ def _multi_dir_testing_config(sourceless=False, extra_version_location=""):
 [alembic]
 script_location = {dir_}
 sqlalchemy.url = {url}
-sqlalchemy.future = {"true" if sqlalchemy_future else "false"}
 sourceless = {"true" if sourceless else "false"}
 path_separator = space
 version_locations = %(here)s/model1/ %(here)s/model2/ %(here)s/model3/ \
@@ -524,8 +518,6 @@ def _multidb_testing_config(engines):
 
     dir_ = _join_path(_get_staging_directory(), "scripts")
 
-    sqlalchemy_future = "future" in config.db.__class__.__module__
-
     databases = ", ".join(engines.keys())
     engines = "\n\n".join(
         f"[{key}]\nsqlalchemy.url = {value.url}"
@@ -536,7 +528,6 @@ def _multidb_testing_config(engines):
 [alembic]
 script_location = {dir_}
 sourceless = false
-sqlalchemy.future = {"true" if sqlalchemy_future else "false"}
 databases = {databases}
 
 {engines}

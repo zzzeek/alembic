@@ -28,7 +28,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "SQLAlchemy>=1.4.23",
+    "SQLAlchemy>=2.0",
     "Mako",
     "typing-extensions>=4.12",
     "tomli;python_version<'3.11'",

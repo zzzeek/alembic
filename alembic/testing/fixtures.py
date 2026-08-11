@@ -22,7 +22,6 @@ from sqlalchemy import text
 from sqlalchemy.testing import config
 from sqlalchemy.testing import mock
 from sqlalchemy.testing.assertions import eq_
-from sqlalchemy.testing.fixtures import FutureEngineMixin
 from sqlalchemy.testing.fixtures import TablesTest as SQLAlchemyTablesTest
 from sqlalchemy.testing.fixtures import TestBase as SQLAlchemyTestBase
 from sqlalchemy.testing.util import drop_all_tables_from_metadata
@@ -34,15 +33,12 @@ from ..environment import EnvironmentContext
 from ..migration import MigrationContext
 from ..operations import Operations
 from ..util import sqla_compat
-from ..util.sqla_compat import sqla_2
 
 testing_config = configparser.ConfigParser()
 testing_config.read(["test.cfg"])
 
 
 class TestBase(SQLAlchemyTestBase):
-    is_sqlalchemy_future = sqla_2
-
     @testing.fixture()
     def clear_staging_dir(self):
         yield
@@ -142,9 +138,6 @@ _connection_fixture_connection = None
 
 class TablesTest(TestBase, SQLAlchemyTablesTest):
     pass
-
-
-FutureEngineMixin.is_sqlalchemy_future = True
 
 
 def capture_db(dialect="postgresql://"):

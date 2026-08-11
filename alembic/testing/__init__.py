@@ -20,7 +20,6 @@ from .assertions import expect_deprecated
 from .assertions import expect_raises
 from .assertions import expect_raises_message
 from .assertions import expect_sqlalchemy_deprecated
-from .assertions import expect_sqlalchemy_deprecated_20
 from .assertions import expect_warnings
 from .assertions import is_
 from .assertions import is_false

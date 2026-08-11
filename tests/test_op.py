@@ -41,7 +41,6 @@ from alembic.testing import mock
 from alembic.testing.assertions import expect_raises_message
 from alembic.testing.fixtures import op_fixture
 from alembic.testing.fixtures import TestBase
-from alembic.util import sqla_compat
 
 
 class OpTest(TestBase):
@@ -1018,16 +1017,8 @@ class OpTest(TestBase):
 
     def test_drop_constraint_if_exists(self):
         context = op_fixture()
-        if sqla_compat.sqla_2:
-            op.drop_constraint("foo_bar_bat", "t1", if_exists=True)
-            context.assert_(
-                "ALTER TABLE t1 DROP CONSTRAINT IF EXISTS foo_bar_bat"
-            )
-        else:
-            with expect_raises_message(
-                NotImplementedError, "SQLAlchemy 2.0 required"
-            ):
-                op.drop_constraint("foo_bar_bat", "t1", if_exists=True)
+        op.drop_constraint("foo_bar_bat", "t1", if_exists=True)
+        context.assert_("ALTER TABLE t1 DROP CONSTRAINT IF EXISTS foo_bar_bat")
 
     def test_create_index(self):
         context = op_fixture()
@@ -1470,11 +1461,6 @@ class OpTest(TestBase):
         async def go(conn):
             pass
 
-        with expect_raises_message(
-            NotImplementedError, "SQLAlchemy 1.4.18. required"
-        ):
-            with patch.object(sqla_compat, "sqla_14_18", False):
-                op.run_async(go)
         with expect_raises_message(
             NotImplementedError, "Cannot call run_async in SQL mode"
         ):

@@ -26,6 +26,7 @@ from sqlalchemy.schema import Column
 from sqlalchemy.schema import ForeignKeyConstraint
 from sqlalchemy.schema import Table
 from sqlalchemy.sql import visitors
+from sqlalchemy.sql.base import _NoneName
 from sqlalchemy.sql.base import DialectKWArgs
 from sqlalchemy.sql.elements import BindParameter
 from sqlalchemy.sql.elements import ColumnClause
@@ -65,10 +66,6 @@ def _safe_int(value: str) -> int | str:
 _vers = tuple(
     [_safe_int(x) for x in re.findall(r"(\d+|[abc]\d)", __version__)]
 )
-# https://docs.sqlalchemy.org/en/latest/changelog/changelog_14.html#change-0c6e0cc67dfe6fac5164720e57ef307d
-sqla_14_18 = _vers >= (1, 4, 18)
-sqla_14_26 = _vers >= (1, 4, 26)
-sqla_2 = _vers >= (2,)
 sqla_2_0_25 = _vers >= (2, 25)
 sqla_2_1 = _vers >= (2, 1)
 sqlalchemy_version = __version__
@@ -125,12 +122,6 @@ def _get_identity_options_dict(
             }
         )
     return as_dict
-
-
-if sqla_2:
-    from sqlalchemy.sql.base import _NoneName
-else:
-    from sqlalchemy.util import symbol as _NoneName  # type: ignore[assignment]
 
 
 _ConstraintName = Union[None, str, _NoneName]
@@ -523,11 +514,8 @@ def _get_constraint_final_name(
     if constraint.name is None:
         return None
     assert dialect is not None
-    # for SQLAlchemy 1.4 we would like to have the option to expand
-    # the use of "deferred" names for constraints as well as to have
-    # some flexibility with "None" name and similar; make use of new
-    # SQLAlchemy API to return what would be the final compiled form of
-    # the name for this dialect.
+    # make use of SQLAlchemy API to return what would be the final
+    # compiled form of the name for this dialect.
     return dialect.identifier_preparer.format_constraint(
         constraint, _alembic_quote=False
     )

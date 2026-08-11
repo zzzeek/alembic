@@ -78,20 +78,6 @@ class SuiteRequirements(Requirements):
         return exclusions.closed()
 
     @property
-    def sqlalchemy_1x(self):
-        return exclusions.skip_if(
-            lambda config: util.sqla_2,
-            "SQLAlchemy 1.x test",
-        )
-
-    @property
-    def sqlalchemy_2(self):
-        return exclusions.skip_if(
-            lambda config: not util.sqla_2,
-            "SQLAlchemy 2.x test",
-        )
-
-    @property
     def sqlalchemy_2_1(self):
         return exclusions.skip_if(
             lambda config: not util.sqla_2_1,

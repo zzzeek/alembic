@@ -259,9 +259,6 @@ class PostgresqlImpl(DefaultImpl):
         for ix in doubled_constraints:
             conn_indexes.remove(ix)
 
-        if not sqla_compat.sqla_2:
-            self._skip_functional_indexes(metadata_indexes, conn_indexes)
-
     # pg behavior regarding modifiers
     # | # | compiled sql     | returned sql     | regexp. group is removed |
     # | - | ---------------- | -----------------| ------------------------ |

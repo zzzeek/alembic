@@ -331,11 +331,6 @@ class MigrationContext:
             current_level = self.connection.get_isolation_level()
             base_connection = self.connection
 
-            # in 1.3 and 1.4 non-future mode, the connection gets switched
-            # out.  we can use the base connection with the new mode
-            # except that it will not know it's in "autocommit" and will
-            # emit deprecation warnings when an autocommit action takes
-            # place.
             self.connection = self.impl.connection = (
                 base_connection.execution_options(isolation_level="AUTOCOMMIT")
             )

@@ -1,0 +1,9 @@
+.. change::
+    :tags: change, general
+    :tickets: 1851
+
+    Support for SQLAlchemy 1.4 is dropped as of Alembic 1.20.0; SQLAlchemy
+    2.0.0 is now the minimum required version.  SQLAlchemy 1.4 has no support
+    for Python 3.13 and above, and the version-conditional code paths it
+    required throughout Alembic have been removed in favor of the SQLAlchemy
+    2.0 API.

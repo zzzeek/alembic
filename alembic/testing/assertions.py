@@ -173,7 +173,3 @@ def expect_deprecated(*messages, **kw):
 
 def expect_sqlalchemy_deprecated(*messages, **kw):
     return _expect_warnings(sa_exc.SADeprecationWarning, messages, **kw)
-
-
-def expect_sqlalchemy_deprecated_20(*messages, **kw):
-    return _expect_warnings(sa_exc.RemovedIn20Warning, messages, **kw)

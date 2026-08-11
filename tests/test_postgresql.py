@@ -58,7 +58,6 @@ from alembic.testing.env import clear_staging_env
 from alembic.testing.env import staging_env
 from alembic.testing.env import write_script
 from alembic.testing.fixtures import capture_context_buffer
-from alembic.testing.fixtures import FutureEngineMixin
 from alembic.testing.fixtures import op_fixture
 from alembic.testing.fixtures import TablesTest
 from alembic.testing.fixtures import TestBase
@@ -518,10 +517,6 @@ class PGAutocommitBlockTest(TestBase):
                 migration_context.execute(
                     text("ALTER TYPE mood ADD VALUE 'soso'")
                 )
-
-
-class PGAutocommitBlockTestFuture(FutureEngineMixin, PGAutocommitBlockTest):
-    pass
 
 
 class PGOfflineEnumTest(TestBase):
@@ -1253,7 +1248,6 @@ class PostgresqlAutogenRenderTest(TestBase):
             "name='TExclID'))",
         )
 
-    @config.requirements.sqlalchemy_2
     def test_inline_exclude_constraint_fn(self):
         """test for #1230"""
 
@@ -1286,7 +1280,6 @@ class PostgresqlAutogenRenderTest(TestBase):
             "'&&'), using='gist'))",
         )
 
-    @config.requirements.sqlalchemy_2
     def test_inline_exclude_constraint_text(self):
         """test for #1184.
 

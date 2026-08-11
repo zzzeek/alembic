@@ -33,13 +33,10 @@ from alembic.testing.env import staging_env
 from alembic.testing.env import three_rev_fixture
 from alembic.testing.env import write_script
 from alembic.testing.fixtures import capture_context_buffer
-from alembic.testing.fixtures import FutureEngineMixin
 from alembic.testing.fixtures import TestBase
 
 
 class PatchEnvironment:
-    branched_connection = False
-
     @contextmanager
     def _patch_environment(self, transactional_ddl, transaction_per_migration):
         conf = EnvironmentContext.configure
@@ -63,61 +60,6 @@ class PatchEnvironment:
             # mode
             assert not conn[0].in_transaction()
 
-    @staticmethod
-    def _branched_connection_env():
-        connect_warning = (
-            'r"The Connection.connect\\(\\) method is considered legacy"'
-        )
-        close_warning = (
-            'r"The .close\\(\\) method on a '
-            "so-called 'branched' connection\""
-        )
-
-        env_file_fixture(
-            textwrap.dedent(
-                """\
-            import alembic
-            from alembic import context
-            from sqlalchemy import engine_from_config, pool
-            from sqlalchemy.testing import expect_warnings
-
-            config = context.config
-
-            target_metadata = None
-
-            def run_migrations_online():
-                connectable = engine_from_config(
-                    config.get_section(config.config_ini_section),
-                    prefix='sqlalchemy.',
-                    poolclass=pool.NullPool)
-
-                with connectable.connect() as conn:
-
-                    with expect_warnings(%(connect_warning)s):
-                        connection = conn.connect()
-                    try:
-                            context.configure(
-                                connection=connection,
-                                target_metadata=target_metadata,
-                            )
-                            with context.begin_transaction():
-                                context.run_migrations()
-                    finally:
-                        with expect_warnings(%(close_warning)s):
-                            connection.close()
-
-            if context.is_offline_mode():
-                assert False
-            else:
-                run_migrations_online()
-            """
-                % {
-                    "connect_warning": connect_warning,
-                    "close_warning": close_warning,
-                }
-            )
-        )
-
 
 @testing.combinations(
     (False, True),
@@ -130,21 +72,15 @@ class ApplyVersionsFunctionalTest(PatchEnvironment, TestBase):
     __only_on__ = "sqlite"
 
     sourceless = False
-    future = False
     transactional_ddl = False
     transaction_per_migration = True
-    branched_connection = False
 
     def setUp(self):
-        self.bind = _sqlite_file_db(
-            future=self.future, poolclass=pool.NullPool
-        )
+        self.bind = _sqlite_file_db(poolclass=pool.NullPool)
         self.env = staging_env(sourceless=self.sourceless)
         self.cfg = _sqlite_testing_config(
-            sourceless=self.sourceless, future=self.future
+            sourceless=self.sourceless,
         )
-        if self.branched_connection:
-            self._branched_connection_env()
 
     def tearDown(self):
         clear_staging_env()
@@ -281,24 +217,6 @@ class ApplyVersionsFunctionalTest(PatchEnvironment, TestBase):
             assert db.dialect.has_table(conn, "foo")
             assert db.dialect.has_table(conn, "bar")
             assert not db.dialect.has_table(conn, "bat")
-
-
-class LegacyApplyVersionsFunctionalTest(ApplyVersionsFunctionalTest):
-    __requires__ = ("sqlalchemy_1x",)
-    branched_connection = True
-
-
-# class level combinations can't do the skips for SQLAlchemy 1.3
-# so we have a separate class
-@testing.combinations(
-    (False, True),
-    (True, False),
-    (True, True),
-    argnames="transactional_ddl,transaction_per_migration",
-    id_="rr",
-)
-class FutureApplyVersionsTest(FutureEngineMixin, ApplyVersionsFunctionalTest):
-    future = True
 
 
 class SimpleSourcelessApplyVersionsTest(ApplyVersionsFunctionalTest):
@@ -442,16 +360,10 @@ class OnlineTransactionalDDLTest(PatchEnvironment, TestBase):
     def tearDown(self):
         clear_staging_env()
 
-    def _opened_transaction_fixture(self, future=False):
+    def _opened_transaction_fixture(self):
         self.env = staging_env()
 
-        if future:
-            self.cfg = _sqlite_testing_config(future=future)
-        else:
-            self.cfg = _sqlite_testing_config()
-
-        if self.branched_connection:
-            self._branched_connection_env()
+        self.cfg = _sqlite_testing_config()
 
         script = ScriptDirectory.from_config(self.cfg)
         a = util.rev_id()
@@ -532,18 +444,11 @@ def downgrade():
         with self._patch_environment(
             transactional_ddl=False, transaction_per_migration=False
         ):
-            if self.is_sqlalchemy_future:
-                with testing.expect_raises_message(
-                    sa.exc.InvalidRequestError,
-                    r".*already",
-                ):
-                    command.upgrade(self.cfg, c)
-            else:
-                with testing.expect_sqlalchemy_deprecated_20(
-                    r"Calling .begin\(\) when a transaction "
-                    "is already begun"
-                ):
-                    command.upgrade(self.cfg, c)
+            with testing.expect_raises_message(
+                sa.exc.InvalidRequestError,
+                r".*already",
+            ):
+                command.upgrade(self.cfg, c)
 
     def test_raise_when_rev_leaves_open_transaction_tpm(self):
         a, b, c = self._opened_transaction_fixture()
@@ -551,18 +456,11 @@ def downgrade():
         with self._patch_environment(
             transactional_ddl=False, transaction_per_migration=True
         ):
-            if self.is_sqlalchemy_future:
-                with testing.expect_raises_message(
-                    sa.exc.InvalidRequestError,
-                    r".*already",
-                ):
-                    command.upgrade(self.cfg, c)
-            else:
-                with testing.expect_sqlalchemy_deprecated_20(
-                    r"Calling .begin\(\) when a transaction is "
-                    "already begun"
-                ):
-                    command.upgrade(self.cfg, c)
+            with testing.expect_raises_message(
+                sa.exc.InvalidRequestError,
+                r".*already",
+            ):
+                command.upgrade(self.cfg, c)
 
     def test_noerr_rev_leaves_open_transaction_transactional_ddl(self):
         a, b, c = self._opened_transaction_fixture()
@@ -570,18 +468,11 @@ def downgrade():
         with self._patch_environment(
             transactional_ddl=True, transaction_per_migration=False
         ):
-            if self.is_sqlalchemy_future:
-                with testing.expect_raises_message(
-                    sa.exc.InvalidRequestError,
-                    r".*already",
-                ):
-                    command.upgrade(self.cfg, c)
-            else:
-                with testing.expect_sqlalchemy_deprecated_20(
-                    r"Calling .begin\(\) when a transaction "
-                    "is already begun"
-                ):
-                    command.upgrade(self.cfg, c)
+            with testing.expect_raises_message(
+                sa.exc.InvalidRequestError,
+                r".*already",
+            ):
+                command.upgrade(self.cfg, c)
 
     def test_noerr_transaction_opened_externally(self):
         a, b, c = self._opened_transaction_fixture()
@@ -611,17 +502,6 @@ run_migrations_online()
 """)
 
         command.stamp(self.cfg, c)
-
-
-class BranchedOnlineTransactionalDDLTest(OnlineTransactionalDDLTest):
-    __requires__ = ("sqlalchemy_1x",)
-    branched_connection = True
-
-
-class FutureOnlineTransactionalDDLTest(
-    FutureEngineMixin, OnlineTransactionalDDLTest
-):
-    pass
 
 
 class EncodingTest(TestBase):

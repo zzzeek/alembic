@@ -20,7 +20,7 @@ jobs:
     name: ${{ matrix.python-version }}-${{ matrix.sqlalchemy }}-${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      # run this job using this matrix, excluding some combinations below.
+      # run this job using this matrix
       matrix:
         os:
           - "ubuntu-22.04"
@@ -28,16 +28,8 @@ jobs:
           - "3.14"
           - "3.15"
         sqlalchemy:
-          - sqla14
           - sqla20
           - sqlamain
-        exclude:
-          # sqla14 does not support 3.14+
-          - sqlalchemy: sqla14
-            python-version: "3.14"
-          # sqla14 does not support 3.14+
-          - sqlalchemy: sqla14
-            python-version: "3.15"
       # abort all jobs as soon as one fails
       fail-fast: true
 

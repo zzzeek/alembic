@@ -11,8 +11,6 @@ import os
 
 import pytest
 
-os.environ["SQLALCHEMY_WARN_20"] = "true"
-
 pytest.register_assert_rewrite("sqlalchemy.testing.assertions")
 
 

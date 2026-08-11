@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import types
 
+from sqlalchemy.testing.engines import testing_engine as _testing_engine
 from sqlalchemy.util import inspect_getfullargspec
 
-from ..util import sqla_2
+testing_engine = _testing_engine
 
 
 def flag_combinations(*combinations):
@@ -109,17 +110,3 @@ def _safe_int(value: str) -> int | str:
         return int(value)
     except:
         return value
-
-
-def testing_engine(url=None, options=None, future=False):
-    from sqlalchemy.testing import config
-    from sqlalchemy.testing.engines import testing_engine
-
-    if not future:
-        future = getattr(config._current.options, "future_engine", False)
-
-    if not sqla_2:
-        kw = {"future": future} if future else {}
-    else:
-        kw = {}
-    return testing_engine(url, options, **kw)

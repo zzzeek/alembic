@@ -570,8 +570,6 @@ class AbstractOperations(util.ModuleClsProxy):
             This method can be called only when alembic is called using
             an async dialect.
         """
-        if not sqla_compat.sqla_14_18:
-            raise NotImplementedError("SQLAlchemy 1.4.18+ required")
         sync_conn = self.get_bind()
         if sync_conn is None:
             raise NotImplementedError("Cannot call run_async in SQL mode")
