@@ -1,3 +1,5 @@
+import sys
+
 from sqlalchemy.testing.requirements import Requirements
 
 from alembic import util
@@ -5,6 +7,14 @@ from ..testing import exclusions
 
 
 class SuiteRequirements(Requirements):
+    @property
+    def windows(self):
+        """target platform is Windows"""
+
+        return exclusions.only_if(
+            lambda config: sys.platform.startswith("win")
+        )
+
     @property
     def schemas(self):
         """Target database must support external schemas, and have one
