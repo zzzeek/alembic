@@ -410,6 +410,23 @@ class DefaultRequirements(SuiteRequirements):
         return exclusions.only_on(["postgresql", "sqlite>=3.9.0"])
 
     @property
+    def expression_server_defaults(self):
+        """target database supports a server default that is a SQL
+        expression, such as ``DEFAULT (rand())``.
+
+        Mirrors the requirement of the same name in SQLAlchemy's own test
+        suite, deferring to the MySQL dialect's own notion of which
+        server versions render an expression default at all.
+
+        """
+
+        return exclusions.skip_if(
+            lambda config: exclusions.against(config, "mysql", "mariadb")
+            and not config.db.dialect._support_default_function,
+            "backend has no expression server defaults",
+        )
+
+    @property
     def nulls_not_distinct_sa(self):
         def _has_nulls_not_distinct():
             try:

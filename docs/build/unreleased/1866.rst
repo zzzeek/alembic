@@ -1,0 +1,25 @@
+.. change::
+    :tags: bug, mysql
+    :tickets: 1866
+
+    Fixed bug where autogenerate with
+    :paramref:`.EnvironmentContext.configure.compare_server_default` would
+    report a persistent server default change for ``Float``, ``Numeric`` and
+    other decimal columns on MySQL. MySQL reports a literal server default
+    for such a column either in quoted form, e.g. ``'1'``, or, when the
+    value is fractional, as a parenthesized expression, e.g. ``(2.5)``;
+    neither form was accommodated for columns other than those of
+    ``Integer`` affinity, so that a default such as ``server_default="1"``
+    on a :class:`sqlalchemy.Float` column would never compare as equal to
+    the reflected value.
+
+.. change::
+    :tags: bug, mysql
+    :tickets: 1866
+
+    Fixed bug where autogenerate with
+    :paramref:`.EnvironmentContext.configure.compare_server_default` would
+    report a persistent server default change for an expression server
+    default such as ``(rand())``. MySQL reports such a default with the
+    surrounding parenthesis included whereas MariaDB reports it without
+    them, so that the parenthesis are now disregarded when comparing.
