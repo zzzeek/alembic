@@ -24,6 +24,7 @@ from alembic.operations import ops
 from alembic.script import ScriptDirectory
 from alembic.testing import assert_raises_message
 from alembic.testing import assertions
+from alembic.testing import config
 from alembic.testing import eq_
 from alembic.testing import expect_raises_message
 from alembic.testing import is_
@@ -1376,6 +1377,35 @@ class MultiDirRevisionCommandTest(TestBase):
             version_path=os.path.join(_get_staging_directory(), "model1"),
         )
         assert os.access(script.path, os.F_OK)
+
+    @testing.variation(
+        "pathtype", ["configured", ("windows", config.requirements.windows)]
+    )
+    def test_multiple_dir_no_bases_version_path_alternate_spelling(
+        self, pathtype
+    ):
+        """Spellings that name the same directory must all be accepted.
+
+        A trailing separator is tested everywhere; on Windows the drive
+        letter's case is tested too, which is what was reported.
+        """
+        configured = os.path.join(_get_staging_directory(), "model1")
+
+        if pathtype.configured:
+            path = configured + os.sep
+        else:
+            drive, rest = os.path.splitdrive(os.path.abspath(configured))
+            assert drive
+            path = drive.swapcase() + rest
+
+        script = command.revision(
+            self.cfg, message="x", head="base", version_path=path
+        )
+        assert os.access(script.path, os.F_OK)
+        eq_(
+            Path(script.path).parent.absolute(),
+            Path(configured).absolute(),
+        )
 
     def test_multiple_dir_chooses_base(self):
         command.revision(
