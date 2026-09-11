@@ -8,6 +8,7 @@ from sqlalchemy import Column
 from sqlalchemy import Computed
 from sqlalchemy import DateTime
 from sqlalchemy import Enum
+from sqlalchemy import exc as sqla_exc
 from sqlalchemy import ForeignKey
 from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
@@ -56,6 +57,7 @@ from alembic.util import CommandError
 from alembic.util import exc as alembic_exc
 from alembic.util.sqla_compat import _NONE_NAME
 from alembic.util.sqla_compat import _safe_commit_connection_transaction
+from alembic.util.sqla_compat import _safe_rollback_connection_transaction
 
 
 class BatchApplyTest(TestBase):
@@ -1399,24 +1401,36 @@ class BatchRoundTripTest(_BatchRoundTripBase, TestBase):
         return t1
 
     @testing.fixture
-    @exclusions.only_on("sqlite")
     def sqlite_referential_integrity(self, connection, metadata):
         """turn on SQLite referential integrity for a single test.
 
-        the tests using this are ``only_on("sqlite")``; as that skip is
-        raised only once the test itself is invoked, i.e. after fixture
-        setup, the fixture has to be a no-op on other backends.
+        the tests using this are ``only_on("sqlite")``, however they are
+        inherited by the MySQL / PostgreSQL round trip tests, and that skip
+        is raised only once the test itself is invoked, i.e. after fixture
+        setup.  the fixture therefore skips on its own, rather than being
+        decorated with ``exclusions.only_on()``; under SQLAlchemy 2.0.52
+        and earlier, exclusion decorators turn a generator fixture into a
+        plain function which pytest then never runs.  see #1868
 
         """
 
+        if not exclusions.against(config._current, "sqlite"):
+            config.skip_test("SQLite PRAGMA foreign_keys only")
+
+        # the PRAGMA autobegins; end that transaction so that the test
+        # can call connection.begin()
         connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        _safe_commit_connection_transaction(connection)
         try:
             yield
         finally:
+            _safe_rollback_connection_transaction(connection)
             connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            _safe_commit_connection_transaction(connection)
 
-            # as these tests are typically intentional fails, clean out
-            # tables left over
+            # these tests fail partway through a batch recreate; reflect
+            # all tables, including the leftover _alembic_tmp table, so
+            # that the metadata fixture drops them
             metadata.reflect(connection)
 
     @testing.fixture
@@ -1666,14 +1680,16 @@ class BatchRoundTripTest(_BatchRoundTripBase, TestBase):
         self._test_fk_points_to_me(metadata, connection, "always")
 
     @exclusions.only_on("sqlite")
-    @exclusions.fails(
-        "intentionally asserting that this "
-        "doesn't work w/ pragma foreign keys"
-    )
     def test_fk_points_to_me_sqlite_refinteg(
         self, sqlite_referential_integrity, connection, metadata
     ):
-        self._test_fk_points_to_me(metadata, connection, "auto")
+        # intentionally asserting that this doesn't work w/ pragma foreign
+        # keys; assert the specific error, as a generic "fails" rule would
+        # also pass for a test that breaks for some unrelated reason
+        with expect_raises_message(
+            sqla_exc.IntegrityError, "FOREIGN KEY constraint failed"
+        ):
+            self._test_fk_points_to_me(metadata, connection, "auto")
 
     def _test_fk_points_to_me(self, metadata, connection, recreate):
         bar = Table(
@@ -1713,14 +1729,15 @@ class BatchRoundTripTest(_BatchRoundTripBase, TestBase):
         self._test_selfref_fk(metadata, connection, "always")
 
     @exclusions.only_on("sqlite")
-    @exclusions.fails(
-        "intentionally asserting that this "
-        "doesn't work w/ pragma foreign keys"
-    )
     def test_selfref_fk_sqlite_refinteg(
         self, sqlite_referential_integrity, connection, metadata
     ):
-        self._test_selfref_fk(metadata, connection, "auto")
+        # intentionally asserting that this doesn't work w/ pragma foreign
+        # keys; see test_fk_points_to_me_sqlite_refinteg
+        with expect_raises_message(
+            sqla_exc.IntegrityError, "FOREIGN KEY constraint failed"
+        ):
+            self._test_selfref_fk(metadata, connection, "auto")
 
     def _test_selfref_fk(self, metadata, connection, recreate):
         bar = Table(
