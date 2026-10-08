@@ -56,7 +56,7 @@ alembic = "alembic.config:main"
 tests = [
     "pytest>8,<10",
     "pytest-xdist",
-    "black==26.5.1",  # for test_post_write.py
+    "black==26.10.0",  # for test_post_write.py
     "zimports",  # for stub testing
     "tzdata",
     "junitparser"
@@ -80,7 +80,7 @@ lint = [
     "flake8-rst-docstrings",
     "pydocstyle",
     "pygments",
-    "black==26.5.1"
+    "black==26.10.0"
 ]
 
 mypy = [
